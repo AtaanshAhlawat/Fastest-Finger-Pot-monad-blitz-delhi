@@ -2,7 +2,7 @@
 
 import { useAccount } from "wagmi";
 import { useState, useEffect } from "react";
-import { useScaffoldContractRead, useScaffoldContractWrite, useScaffoldWatchContractEvent } from "~~/hooks/scaffold-eth";
+import { useScaffoldReadContract, useScaffoldWriteContract, useScaffoldWatchContractEvent } from "~~/hooks/scaffold-eth";
 import { useWatchBalance } from "~~/hooks/scaffold-eth/useWatchBalance";
 import { EtherInput } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
@@ -18,83 +18,68 @@ const Home = () => {
   const [timeRemaining, setTimeRemaining] = useState(0);
 
   // Read contract data
-  const { data: roundActive } = useScaffoldContractRead({
+  const { data: roundActive } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "roundActive",
     watch: true,
   });
 
-  const { data: potSize } = useScaffoldContractRead({
+  const { data: potSize } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "potSize",
     watch: true,
   });
 
-  const { data: roundNumber } = useScaffoldContractRead({
+  const { data: roundNumber } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "currentRoundNumber",
     watch: true,
   });
 
-  const { data: winner } = useScaffoldContractRead({
+  const { data: winner } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "currentWinner",
     watch: true,
   });
 
-  const { data: timeLeft } = useScaffoldContractRead({
+  const { data: timeLeft } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "getTimeRemaining",
     watch: true,
   });
 
-  const { data: roundStartTime } = useScaffoldContractRead({
+  const { data: roundStartTime } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "roundStartTime",
     watch: true,
   });
 
-  const { data: playerData } = useScaffoldContractRead({
+  const { data: playerData } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "getPlayerData",
     args: [connectedAddress],
     watch: true,
   });
 
-  const { data: playerScore } = useScaffoldContractRead({
+  const { data: playerScore } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "getPlayerScore",
     args: [connectedAddress],
     watch: true,
   });
 
-  const { data: allPlayers } = useScaffoldContractRead({
+  const { data: allPlayers } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "getCurrentRoundPlayers",
     watch: true,
   });
 
   // Write functions
-  const { writeAsync: joinRound, isPending: isJoining } = useScaffoldContractWrite({
-    contractName: "FastestFingerPot",
-    functionName: "joinRound",
-    onBlockConfirmation: () => {
-      setHasJoined(true);
-    },
-  });
-
-  const { writeAsync: click, isPending: isClicking } = useScaffoldContractWrite({
-    contractName: "FastestFingerPot",
-    functionName: "click",
-    onBlockConfirmation: () => {
-      // Click recorded
-    },
-  });
-
-  const { writeAsync: endRound } = useScaffoldContractWrite({
-    contractName: "FastestFingerPot",
-    functionName: "endRound",
-  });
+  const { writeContractAsync: joinRound, isMining: isJoining } = useScaffoldWriteContract("FastestFingerPot");
+  
+  const { writeContractAsync: click, isMining: isClicking } = useScaffoldWriteContract("FastestFingerPot");
+  
+  const { writeContractAsync: endRound } = useScaffoldWriteContract("FastestFingerPot");
 
   // Watch events
   useScaffoldWatchContractEvent({
@@ -146,11 +131,11 @@ const Home = () => {
   useEffect(() => {
     if (timeRemaining === 0 && roundActive) {
       const timer = setTimeout(() => {
-        endRound();
+        endRound({ functionName: "endRound" });
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [timeRemaining, roundActive]);
+  }, [timeRemaining, roundActive, endRound]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -164,7 +149,15 @@ const Home = () => {
       return;
     }
     const stakeInWei = BigInt(Math.floor(parseFloat(stakeAmount) * 1e18));
-    await joinRound({ value: stakeInWei.toString() });
+    await joinRound(
+      {
+        functionName: "joinRound",
+        value: stakeInWei,
+      },
+      {
+        onBlockConfirmation: () => setHasJoined(true),
+      }
+    );
     setStakeAmount("");
   };
 
@@ -277,7 +270,7 @@ const Home = () => {
           <div className="mb-8 w-full max-w-4xl">
             <button
               className="btn btn-lg w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-none text-4xl py-12 rounded-xl shadow-lg transform transition-all active:scale-95"
-              onClick={() => click()}
+              onClick={() => click({ functionName: "click" })}
               disabled={isClicking || !roundActive}
             >
               {isClicking ? "Clicking..." : "⚡ CLICK ME! ⚡"}
@@ -340,14 +333,14 @@ const Home = () => {
 
 // Player Row Component
 const PlayerRow = ({ player, rank }: { player: string; rank: number }) => {
-  const { data: playerData } = useScaffoldContractRead({
+  const { data: playerData } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "getPlayerData",
     args: [player],
     watch: true,
   });
 
-  const { data: playerScore } = useScaffoldContractRead({
+  const { data: playerScore } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "getPlayerScore",
     args: [player],
