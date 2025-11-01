@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { Address, EtherInput } from "~~/components/scaffold-eth";
@@ -9,7 +10,7 @@ import {
   useScaffoldWriteContract,
 } from "~~/hooks/scaffold-eth";
 
-const Home = () => {
+const Home = (): ReactNode => {
   const { address: connectedAddress } = useAccount();
 
   // Game state
@@ -469,7 +470,7 @@ const Home = () => {
 };
 
 // Leaderboard Table Component
-const LeaderboardTable = ({ players }: { players: readonly string[] }) => {
+const LeaderboardTable = ({ players }: { players: readonly string[] }): ReactNode => {
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -492,7 +493,7 @@ const LeaderboardTable = ({ players }: { players: readonly string[] }) => {
 };
 
 // Player Row Component
-const PlayerRow = ({ player, rank }: { player: string; rank: number }) => {
+const PlayerRow = ({ player, rank }: { player: string; rank: number }): ReactNode => {
   const { data: playerData } = useScaffoldReadContract({
     contractName: "FastestFingerPot",
     functionName: "getPlayerData",
