@@ -1,6 +1,5 @@
 import { expect } from "chai";
 import hre from "hardhat";
-import { Contract } from "ethers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("FastestFingerPot", () => {
@@ -17,7 +16,7 @@ describe("FastestFingerPot", () => {
     it("Should deploy and initialize with round 1", async () => {
       const { contract } = await loadFixture(deployFastestFingerPotFixture);
       expect(await contract.currentRoundNumber()).to.equal(1);
-      expect(await contract.roundActive()).to.be.true;
+      expect(await contract.roundActive()).to.equal(true);
     });
 
     it("Should have 15 second round duration", async () => {
@@ -34,7 +33,7 @@ describe("FastestFingerPot", () => {
       await contract.connect(player1).joinRound({ value: stake });
 
       const playerData = await contract.getPlayerData(player1.address);
-      expect(playerData.hasJoined).to.be.true;
+      expect(playerData.hasJoined).to.equal(true);
       expect(playerData.stake).to.equal(stake);
       expect(playerData.clicks).to.equal(0);
     });
@@ -42,9 +41,7 @@ describe("FastestFingerPot", () => {
     it("Should reject joining with zero stake", async () => {
       const { contract, player1 } = await loadFixture(deployFastestFingerPotFixture);
 
-      await expect(contract.connect(player1).joinRound({ value: 0 })).to.be.revertedWith(
-        "Must stake some MON"
-      );
+      await expect(contract.connect(player1).joinRound({ value: 0 })).to.be.revertedWith("Must stake some MON");
     });
 
     it("Should reject joining same round twice", async () => {
@@ -52,9 +49,9 @@ describe("FastestFingerPot", () => {
       const stake = hre.ethers.parseEther("0.1");
 
       await contract.connect(player1).joinRound({ value: stake });
-      await expect(
-        contract.connect(player1).joinRound({ value: stake })
-      ).to.be.revertedWith("Already joined this round");
+      await expect(contract.connect(player1).joinRound({ value: stake })).to.be.revertedWith(
+        "Already joined this round",
+      );
     });
 
     it("Should update pot size when players join", async () => {
@@ -88,9 +85,7 @@ describe("FastestFingerPot", () => {
     it("Should reject clicking without joining", async () => {
       const { contract, player1 } = await loadFixture(deployFastestFingerPotFixture);
 
-      await expect(contract.connect(player1).click()).to.be.revertedWith(
-        "Must join round first"
-      );
+      await expect(contract.connect(player1).click()).to.be.revertedWith("Must join round first");
     });
   });
 
@@ -201,4 +196,3 @@ describe("FastestFingerPot", () => {
     });
   });
 });
-

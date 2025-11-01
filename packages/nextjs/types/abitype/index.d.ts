@@ -14,3 +14,4 @@ declare module "~~/node_modules/viem/node_modules/abitype" {
     AddressType: AddressType;
   }
 }
+

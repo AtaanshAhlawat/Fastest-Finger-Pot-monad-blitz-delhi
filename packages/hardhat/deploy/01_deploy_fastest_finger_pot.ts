@@ -24,4 +24,3 @@ const deployFastestFingerPot: DeployFunction = async function (hre: HardhatRunti
 export default deployFastestFingerPot;
 
 deployFastestFingerPot.tags = ["FastestFingerPot"];
-
