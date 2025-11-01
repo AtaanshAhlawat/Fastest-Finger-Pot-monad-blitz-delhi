@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 contract FastestFingerPot is ReentrancyGuard {
     // Round duration in seconds
     uint256 public constant ROUND_DURATION = 15 seconds;
-    uint256 public constant INACTIVITY_TIMEOUT = 5 minutes; // 5 minutes if no one joins
+    uint256 public constant INACTIVITY_TIMEOUT = 1 minutes; // 5 minutes if no one joins
     
     // Current round state
     uint256 public roundStartTime;

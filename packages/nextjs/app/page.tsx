@@ -146,19 +146,27 @@ const Home = () => {
 
   // Update time remaining from contract
   useEffect(() => {
-    if (timeLeft !== undefined) {
-      setTimeRemaining(Number(timeLeft));
+    if (timeLeft !== undefined && roundActive) {
+      const timeLeftNum = Number(timeLeft);
+      setTimeRemaining(timeLeftNum);
+      console.log("Time remaining updated from contract:", timeLeftNum);
     }
-  }, [timeLeft]);
+  }, [timeLeft, roundActive]);
 
   // Real-time countdown timer
   useEffect(() => {
-    if (!roundActive || timeRemaining <= 0) return;
+    if (!roundActive) {
+      setTimeRemaining(0);
+      return;
+    }
+    
+    if (timeRemaining <= 0) {
+      return;
+    }
 
     const interval = setInterval(() => {
       setTimeRemaining(prev => {
         if (prev <= 1) {
-          clearInterval(interval);
           return 0;
         }
         return prev - 1;
@@ -166,7 +174,7 @@ const Home = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [roundActive, timeLeft]); // Re-initialize when contract timeLeft changes
+  }, [roundActive, timeLeft, timeRemaining]); // Re-initialize when contract timeLeft changes
 
   // Update player data
   useEffect(() => {
@@ -193,25 +201,7 @@ const Home = () => {
     }
   }, [playerData, connectedAddress, hasJoined]);
 
-  // Auto-end round when time is up
-  useEffect(() => {
-    if (timeRemaining === 0 && roundActive) {
-      const timer = setTimeout(() => {
-        endRound({ functionName: "endRound" });
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [timeRemaining, roundActive, endRound]);
-
-  // Auto-claim inactivity payout when available
-  useEffect(() => {
-    if (canClaimInactivity) {
-      const timer = setTimeout(() => {
-        claimInactivityPayout({ functionName: "claimInactivityPayout" });
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [canClaimInactivity, claimInactivityPayout]);
+  // Removed auto-executing transactions - user must click buttons manually
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -225,16 +215,27 @@ const Home = () => {
       return;
     }
     const stakeInWei = BigInt(Math.floor(parseFloat(stakeAmount) * 1e18));
-    await joinRound(
-      {
-        functionName: "joinRound",
-        value: stakeInWei,
-      },
-      {
-        onBlockConfirmation: () => setHasJoined(true),
-      },
-    );
-    setStakeAmount("");
+    try {
+      await joinRound(
+        {
+          functionName: "joinRound",
+          value: stakeInWei,
+        },
+        {
+          onBlockConfirmation: () => {
+            console.log("Join transaction confirmed!");
+            setHasJoined(true);
+            // Force a refresh of time remaining after joining
+            if (timeLeft !== undefined) {
+              setTimeRemaining(Number(timeLeft));
+            }
+          },
+        },
+      );
+      setStakeAmount("");
+    } catch (error) {
+      console.error("Failed to join round:", error);
+    }
   };
 
   const formatScore = (score: bigint) => {
@@ -390,8 +391,16 @@ const Home = () => {
           </div>
         )}
 
-        {/* Click Button */}
-        {connectedAddress && hasJoined && roundActive && timeRemaining > 0 && (
+        {/* Debug Info - Remove after testing */}
+        {connectedAddress && (
+          <div className="text-xs text-gray-400 mb-2">
+            Debug: hasJoined={hasJoined ? "true" : "false"}, roundActive={roundActive ? "true" : "false"}, 
+            timeRemaining={timeRemaining}, timeLeft={timeLeft ? Number(timeLeft).toString() : "undefined"}
+          </div>
+        )}
+
+        {/* Click Button - Show if joined and round is active */}
+        {connectedAddress && hasJoined && roundActive && (timeRemaining > 0 || (timeLeft && Number(timeLeft) > 0)) && (
           <div className="mb-8 w-full max-w-4xl">
             <button
               className="btn btn-lg w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-none text-4xl py-12 rounded-xl shadow-lg transform transition-all active:scale-95"
