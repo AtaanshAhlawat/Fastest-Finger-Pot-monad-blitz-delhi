@@ -12,12 +12,14 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 contract FastestFingerPot is ReentrancyGuard {
     // Round duration in seconds
     uint256 public constant ROUND_DURATION = 15 seconds;
+    uint256 public constant INACTIVITY_TIMEOUT = 5 minutes; // 5 minutes if no one joins
     
     // Current round state
     uint256 public roundStartTime;
     uint256 public currentRoundNumber;
     bool public roundActive;
     address public currentWinner;
+    address public lastRoundWinner; // Winner of the previous round for auto-payout
     uint256 public potSize;
     
     // Player data
@@ -36,6 +38,7 @@ contract FastestFingerPot is ReentrancyGuard {
     event PlayerClicked(uint256 indexed roundNumber, address indexed player);
     event RoundEnded(uint256 indexed roundNumber, address indexed winner, uint256 potSize, uint256 score);
     event WinnerPaid(uint256 indexed roundNumber, address indexed winner, uint256 amount);
+    event InactivityPayout(uint256 indexed roundNumber, address indexed recipient, uint256 amount);
     
     constructor() {
         roundStartTime = block.timestamp;
@@ -106,13 +109,18 @@ contract FastestFingerPot is ReentrancyGuard {
         uint256 winnerPot = potSize;
         uint256 winnerScore = highestScore;
         
+        // Store winner for potential inactivity payout
+        if (winner != address(0)) {
+            lastRoundWinner = winner;
+        }
+        
         // Reset for next round
         roundActive = false;
         potSize = 0;
         
         emit RoundEnded(currentRoundNumber, winner, winnerPot, winnerScore);
         
-        // Pay winner
+        // Pay winner immediately
         if (winner != address(0) && winnerPot > 0) {
             (bool success, ) = payable(winner).call{value: winnerPot}("");
             require(success, "Transfer failed");
@@ -163,6 +171,51 @@ contract FastestFingerPot is ReentrancyGuard {
      */
     function getCurrentRoundPlayers() public view returns (address[] memory) {
         return roundPlayerList[currentRoundNumber];
+    }
+    
+    /**
+     * @dev Claim inactivity payout - if no one joined for 5 minutes, last winner gets the pot
+     * @notice Can be called by anyone, but only if conditions are met
+     */
+    function claimInactivityPayout() external nonReentrant {
+        require(roundActive, "Round not active");
+        require(block.timestamp >= roundStartTime + INACTIVITY_TIMEOUT, "Inactivity timeout not reached");
+        require(roundPlayerList[currentRoundNumber].length == 0, "Players have joined this round");
+        require(lastRoundWinner != address(0), "No previous winner");
+        require(address(this).balance > 0, "No funds to payout");
+        
+        uint256 payout = address(this).balance;
+        potSize = 0;
+        
+        (bool success, ) = payable(lastRoundWinner).call{value: payout}("");
+        require(success, "Transfer failed");
+        
+        emit InactivityPayout(currentRoundNumber, lastRoundWinner, payout);
+        
+        // Start new round
+        currentRoundNumber++;
+        roundStartTime = block.timestamp;
+        emit RoundStarted(currentRoundNumber, roundStartTime);
+    }
+    
+    /**
+     * @dev Check if inactivity timeout has been reached
+     */
+    function canClaimInactivityPayout() public view returns (bool) {
+        return roundActive &&
+               block.timestamp >= roundStartTime + INACTIVITY_TIMEOUT &&
+               roundPlayerList[currentRoundNumber].length == 0 &&
+               lastRoundWinner != address(0) &&
+               address(this).balance > 0;
+    }
+    
+    /**
+     * @dev Get time until inactivity payout can be claimed
+     */
+    function getTimeUntilInactivityPayout() public view returns (uint256) {
+        if (!roundActive || roundPlayerList[currentRoundNumber].length > 0) return 0;
+        if (block.timestamp >= roundStartTime + INACTIVITY_TIMEOUT) return 0;
+        return (roundStartTime + INACTIVITY_TIMEOUT) - block.timestamp;
     }
     
     /**

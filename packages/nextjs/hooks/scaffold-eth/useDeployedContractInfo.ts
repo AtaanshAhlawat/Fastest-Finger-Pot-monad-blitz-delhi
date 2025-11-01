@@ -21,28 +21,39 @@ export const useDeployedContractInfo = <TContractName extends ContractName>(cont
         if (!isMounted() || !publicClient) return;
 
         if (!deployedContract) {
+          console.warn(`Contract ${contractName} not found in deployedContracts for chain ${targetNetwork.id}`);
           setStatus(ContractCodeStatus.NOT_FOUND);
           return;
         }
 
-        const code = await publicClient.getBytecode({
-          address: deployedContract.address,
-        });
+        // Add timeout and retry logic
+        const code = await Promise.race([
+          publicClient.getBytecode({
+            address: deployedContract.address,
+          }),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), 10000)
+          ),
+        ]) as string;
 
         // If contract code is `0x` => no contract deployed on that address
-        if (code === "0x") {
+        if (code === "0x" || !code) {
+          console.warn(`No bytecode found at ${deployedContract.address} on chain ${targetNetwork.id}`);
           setStatus(ContractCodeStatus.NOT_FOUND);
           return;
         }
         setStatus(ContractCodeStatus.DEPLOYED);
       } catch (e) {
-        console.error(e);
-        setStatus(ContractCodeStatus.NOT_FOUND);
+        console.error(`Error checking contract deployment for ${contractName}:`, e);
+        // Retry once after a delay
+        setTimeout(() => {
+          checkContractDeployment();
+        }, 3000);
       }
     };
 
     checkContractDeployment();
-  }, [isMounted, contractName, deployedContract, publicClient]);
+  }, [isMounted, contractName, deployedContract, publicClient, targetNetwork.id]);
 
   return {
     data: status === ContractCodeStatus.DEPLOYED ? deployedContract : undefined,

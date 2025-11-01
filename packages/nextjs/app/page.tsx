@@ -17,6 +17,7 @@ const Home = () => {
   const [hasJoined, setHasJoined] = useState(false);
   const [playerClicks, setPlayerClicks] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const [optimisticClicks, setOptimisticClicks] = useState(0); // For instant UI updates
 
   // Read contract data
   const { data: roundActive } = useScaffoldReadContract({
@@ -69,6 +70,27 @@ const Home = () => {
     watch: true,
   });
 
+  const { data: lastRoundWinner } = useScaffoldReadContract({
+    contractName: "FastestFingerPot",
+    functionName: "lastRoundWinner",
+    watch: true,
+  });
+
+  const { data: canClaimInactivity } = useScaffoldReadContract({
+    contractName: "FastestFingerPot",
+    functionName: "canClaimInactivityPayout",
+    watch: true,
+  });
+
+  const { data: timeUntilInactivityPayout } = useScaffoldReadContract({
+    contractName: "FastestFingerPot",
+    functionName: "getTimeUntilInactivityPayout",
+    watch: true,
+  });
+
+  const { writeContractAsync: claimInactivityPayout } = useScaffoldWriteContract("FastestFingerPot");
+
+
   // Write functions
   const { writeContractAsync: joinRound, isMining: isJoining } = useScaffoldWriteContract("FastestFingerPot");
 
@@ -91,6 +113,8 @@ const Home = () => {
     eventName: "PlayerClicked",
     onLogs: logs => {
       console.log("Player clicked:", logs);
+      // Reset optimistic clicks and sync with contract
+      setOptimisticClicks(0);
       if (playerData) {
         setPlayerClicks(Number(playerData.clicks));
       }
@@ -120,29 +144,51 @@ const Home = () => {
     },
   });
 
-  // Update time remaining
+  // Update time remaining from contract
   useEffect(() => {
-    if (timeLeft) {
+    if (timeLeft !== undefined) {
       setTimeRemaining(Number(timeLeft));
     }
   }, [timeLeft]);
+
+  // Real-time countdown timer
+  useEffect(() => {
+    if (!roundActive || timeRemaining <= 0) return;
+
+    const interval = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [roundActive, timeLeft]); // Re-initialize when contract timeLeft changes
 
   // Update player data
   useEffect(() => {
     if (playerData) {
       const wasJoined = playerData.hasJoined;
       setHasJoined(wasJoined);
-      setPlayerClicks(Number(playerData.clicks));
+      const actualClicks = Number(playerData.clicks);
+      setPlayerClicks(actualClicks);
+      // Reset optimistic clicks when contract data updates
+      setOptimisticClicks(0);
 
       // If player data shows not joined but we thought we were joined,
       // it means a new round started - reset state
       if (!wasJoined && hasJoined) {
         setStakeAmount("");
+        setOptimisticClicks(0);
       }
     } else if (connectedAddress) {
       // No player data means not joined to current round
       setHasJoined(false);
       setPlayerClicks(0);
+      setOptimisticClicks(0);
       // Don't reset stake amount here - let user keep their input if they want to join
     }
   }, [playerData, connectedAddress, hasJoined]);
@@ -156,6 +202,16 @@ const Home = () => {
       return () => clearTimeout(timer);
     }
   }, [timeRemaining, roundActive, endRound]);
+
+  // Auto-claim inactivity payout when available
+  useEffect(() => {
+    if (canClaimInactivity) {
+      const timer = setTimeout(() => {
+        claimInactivityPayout({ functionName: "claimInactivityPayout" });
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [canClaimInactivity, claimInactivityPayout]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -227,6 +283,31 @@ const Home = () => {
           </div>
         )}
 
+        {/* Inactivity Timer - Show when no players have joined */}
+        {roundActive && (!allPlayers || allPlayers.length === 0) && timeUntilInactivityPayout && Number(timeUntilInactivityPayout) > 0 && (
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-xl border-2 border-purple-300 mb-8 w-full max-w-4xl">
+            <div className="text-center">
+              <div className="text-sm text-gray-600 mb-2">⏰ Waiting for players to join...</div>
+              <div className="text-2xl font-bold text-purple-600 mb-2">
+                {formatTime(Number(timeUntilInactivityPayout))} until auto-payout
+              </div>
+              {lastRoundWinner && lastRoundWinner !== "0x0000000000000000000000000000000000000000" && (
+                <div className="text-sm text-gray-500">
+                  If no one joins, previous winner <Address address={lastRoundWinner} /> will get the pot
+                </div>
+              )}
+              {canClaimInactivity && (
+                <button
+                  className="btn btn-primary mt-4"
+                  onClick={() => claimInactivityPayout({ functionName: "claimInactivityPayout" })}
+                >
+                  Claim Inactivity Payout
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Player Info */}
         {connectedAddress && (
           <div className="bg-white p-6 rounded-xl border-2 border-gray-300 mb-8 w-full max-w-4xl">
@@ -244,7 +325,12 @@ const Home = () => {
               )}
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">Your Clicks</div>
-                <div className="text-2xl font-bold">{playerClicks}</div>
+                <div className="text-2xl font-bold">
+                  {playerClicks + optimisticClicks}
+                  {optimisticClicks > 0 && (
+                    <span className="text-sm text-green-500 ml-2">(+{optimisticClicks})</span>
+                  )}
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">Your Score</div>
@@ -255,17 +341,35 @@ const Home = () => {
         )}
 
         {/* Join Section */}
-        {connectedAddress && !hasJoined && (
-          <div className="bg-white p-6 rounded-xl border-2 border-green-300 mb-8 w-full max-w-4xl">
-            <h2 className="text-2xl font-bold mb-4 text-center">Join the Round</h2>
+        {connectedAddress && !hasJoined && roundActive && (
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-8 rounded-xl border-2 border-green-400 shadow-lg mb-8 w-full max-w-4xl">
+            <h2 className="text-3xl font-bold mb-2 text-center text-green-700">🎮 Join the Round!</h2>
+            <p className="text-center text-gray-600 mb-6">Enter your stake amount to participate in the current round</p>
             <div className="flex flex-col md:flex-row gap-4 items-center">
               <div className="flex-grow">
-                <EtherInput value={stakeAmount} onChange={setStakeAmount} placeholder="Enter stake amount in MON" />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Stake Amount (MON)</label>
+                <EtherInput value={stakeAmount} onChange={setStakeAmount} placeholder="e.g., 0.1 MON" />
               </div>
-              <button className="btn btn-primary btn-lg" onClick={handleJoinRound} disabled={isJoining || !roundActive}>
-                {isJoining ? "Joining..." : "Join Round"}
+              <button
+                className="btn btn-primary btn-lg px-8 py-3 text-lg font-bold"
+                onClick={handleJoinRound}
+                disabled={isJoining || !roundActive || !stakeAmount || parseFloat(stakeAmount) <= 0}
+              >
+                {isJoining ? "⏳ Joining..." : "🚀 Join Round"}
               </button>
             </div>
+            <p className="text-center text-sm text-gray-500 mt-4">
+              💡 Tip: Higher stake = More points per click = Better chance to win!
+            </p>
+          </div>
+        )}
+
+        {/* Cannot join when round not active */}
+        {connectedAddress && !hasJoined && !roundActive && (
+          <div className="bg-yellow-50 border-2 border-yellow-400 p-6 rounded-xl mb-8 w-full max-w-4xl">
+            <p className="text-center text-gray-700 text-lg">
+              ⏸️ Round is not active. Waiting for the next round to start...
+            </p>
           </div>
         )}
 
@@ -291,10 +395,20 @@ const Home = () => {
           <div className="mb-8 w-full max-w-4xl">
             <button
               className="btn btn-lg w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-none text-4xl py-12 rounded-xl shadow-lg transform transition-all active:scale-95"
-              onClick={() => click({ functionName: "click" })}
+              onClick={async () => {
+                // Optimistically update the click count immediately
+                setOptimisticClicks(prev => prev + 1);
+                try {
+                  await click({ functionName: "click" });
+                } catch (error) {
+                  // Revert optimistic update on error
+                  setOptimisticClicks(prev => Math.max(0, prev - 1));
+                  console.error("Click failed:", error);
+                }
+              }}
               disabled={isClicking || !roundActive || timeRemaining === 0}
             >
-              {isClicking ? "Clicking..." : "⚡ CLICK ME! ⚡"}
+              {isClicking ? "⏳ Clicking..." : "⚡ CLICK ME! ⚡"}
             </button>
             <div className="text-center mt-4 text-gray-600">Higher stake = More points per click!</div>
           </div>
@@ -312,28 +426,12 @@ const Home = () => {
         )}
 
         {/* Players Leaderboard */}
-        <div className="bg-white p-6 rounded-xl border-2 border-blue-300 w-full max-w-4xl">
-          <h2 className="text-2xl font-bold mb-4 text-center">Leaderboard</h2>
+        <div className="bg-white p-6 rounded-xl border-2 border-blue-300 w-full max-w-4xl mb-8">
+          <h2 className="text-2xl font-bold mb-4 text-center">Current Round Leaderboard</h2>
           {!allPlayers || allPlayers.length === 0 ? (
             <div className="text-center text-gray-500 py-4">No players yet. Be the first to join!</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b-2 border-gray-200">
-                    <th className="text-left p-2">Rank</th>
-                    <th className="text-left p-2">Player</th>
-                    <th className="text-right p-2">Clicks</th>
-                    <th className="text-right p-2">Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allPlayers.map((player, index) => (
-                    <PlayerRow key={player} player={player} rank={index + 1} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <LeaderboardTable players={allPlayers || []} />
           )}
         </div>
 
@@ -361,6 +459,29 @@ const Home = () => {
   );
 };
 
+// Leaderboard Table Component
+const LeaderboardTable = ({ players }: { players: string[] }) => {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b-2 border-gray-200">
+            <th className="text-left p-2">Rank</th>
+            <th className="text-left p-2">Player</th>
+            <th className="text-right p-2">Clicks</th>
+            <th className="text-right p-2">Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((player, index) => (
+            <PlayerRow key={player} player={player} rank={index + 1} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 // Player Row Component
 const PlayerRow = ({ player, rank }: { player: string; rank: number }) => {
   const { data: playerData } = useScaffoldReadContract({
@@ -381,14 +502,21 @@ const PlayerRow = ({ player, rank }: { player: string; rank: number }) => {
     return (Number(score) / 1e18).toFixed(2);
   };
 
+  const getRankEmoji = (rank: number) => {
+    if (rank === 1) return "🥇";
+    if (rank === 2) return "🥈";
+    if (rank === 3) return "🥉";
+    return `#${rank}`;
+  };
+
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50">
-      <td className="p-2 font-bold">#{rank}</td>
-      <td className="p-2">
+    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+      <td className="p-3 font-bold text-lg">{getRankEmoji(rank)}</td>
+      <td className="p-3">
         <Address address={player} />
       </td>
-      <td className="p-2 text-right">{playerData ? Number(playerData.clicks) : 0}</td>
-      <td className="p-2 text-right font-bold">{playerScore ? formatScore(playerScore) : "0.00"}</td>
+      <td className="p-3 text-right font-semibold">{playerData ? Number(playerData.clicks) : 0}</td>
+      <td className="p-3 text-right font-bold text-green-600">{playerScore ? formatScore(playerScore) : "0.00"}</td>
     </tr>
   );
 };
