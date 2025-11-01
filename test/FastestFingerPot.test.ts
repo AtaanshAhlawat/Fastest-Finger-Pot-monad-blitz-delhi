@@ -1,9 +1,8 @@
 import { expect } from "chai";
-import hre from "hardhat";
+import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
-
-const { ethers } = hre;
+import "@nomicfoundation/hardhat-chai-matchers";
 type FastestFingerPot = any;
 
 describe("FastestFingerPot", function () {
