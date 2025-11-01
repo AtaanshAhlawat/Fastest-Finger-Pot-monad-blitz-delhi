@@ -1,95 +1,351 @@
-# 🏗 Scaffold-ETH-Monad
+# 🎮 Fastest Finger Pot - Monad Hackathon
 
 <div align="center">
-<img src=".github/assets/hero_image.png" />
+  <img src="packages/nextjs/public/logo.svg" width="150" height="150" />
+  
+  <h3>Click your way to crypto fortune on Monad Testnet!</h3>
+  
+  <p>
+    A full-stack decentralized game where players compete to click the fastest during 15-second rounds.
+    Winner takes all based on the highest (clicks × stake) score.
+  </p>
+  
+  <p>
+    <strong>🏗️ Built with:</strong> Solidity, Hardhat, Next.js, Wagmi, Viem, RainbowKit
+  </p>
+  
+  <p>
+    <strong>🌐 Deployed on:</strong> Monad Testnet (Chain ID: 10200)
+  </p>
 </div>
 
-<h4 align="center">
-  <a href="https://docs.monad.xyz">Documentation</a>
-  | <a href="https://github.com/monad-developers/scaffold-eth-monad/issues">Report Issue</a>
+---
 
-</h4>
+## 🎯 How It Works
 
-⚙️ Built using NextJS, RainbowKit, Hardhat, Wagmi, Viem, and Typescript.
+1. **Join** a round by staking MON tokens (any amount you want!)
+2. **Click** as fast as you can during the 15-second round
+3. **Win** the entire pot if you have the highest score (clicks × stake)
+4. **Auto-payout** to the winner when the round ends
 
--   ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
--   🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
--   🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
--   🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet.
--   🔐 **Integration with Wallet Providers**: Connect to different wallet providers and interact with the Ethereum network.
+**Pro Tip:** Higher stake = more points per click! 🚀
 
-![Front Page](.github/assets/front_page.png)
+---
 
-## Requirements
+## 🚀 Quick Start
 
-Before you begin, you need to install the following tools:
+### Prerequisites
 
--   [Node (>= v18.18)](https://nodejs.org/en/download/)
--   Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
--   [Git](https://git-scm.com/downloads)
+- [Node.js](https://nodejs.org/) (v18.18.0 or higher)
+- [Yarn](https://yarnpkg.com/) (v3.2.3)
+- A crypto wallet (MetaMask recommended)
+- Test MON on Monad Testnet
 
-## Quickstart
+### 1. Clone & Install
 
-To get started, follow the steps below:
+```bash
+# Clone the repository
+git clone https://github.com/your-username/fastest-finger-pot.git
+cd fastest-finger-pot
 
-1. Clone this repo & install dependencies
-
-```sh
-git clone https://github.com/monad-developers/scaffold-eth-monad.git
+# Install dependencies
+yarn install
 ```
 
-2. Open the project directory and install dependencies
+### 2. Configure Environment
 
-```sh
-cd scaffold-eth-monad && yarn install
+#### For Hardhat (Smart Contracts)
+
+Create a `.env` file in `packages/hardhat/`:
+
+```bash
+cd packages/hardhat
+cp .env.example .env  # Copy the example file
 ```
 
-2. Setup `.env` file for Hardhat:
+Edit `.env` and add your configuration:
 
-Make a copy of `.env.example` in `packages/hardhat` folder, name it `.env` and enter the respective values
-
-```
-DEPLOYER_PRIVATE_KEY=
-MONAD_RPC_URL=
-MONAD_CHAIN_ID=
-MONAD_EXPLORER_URL=
+```env
+DEPLOYER_PRIVATE_KEY=your_private_key_here
+MONAD_RPC_URL=https://testnet-rpc.monad.xyz
+MONAD_CHAIN_ID=10200
 ```
 
-3. Deploying smart contracts on Monad:
+#### For Next.js (Frontend)
 
-Once the `.env` file is setup, you can now run the below command in your terminal.
+Optionally create a `.env.local` file in `packages/nextjs/` for WalletConnect:
 
-```sh
-yarn deploy
+```bash
+cd packages/nextjs
+cp .env.example .env.local
 ```
 
-This command deploys a test smart contract to the Monad testnet network. The contract is located in `packages/hardhat/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/hardhat/deploy` to deploy the contract to the network. You can also customize the deploy script.
+Edit `.env.local` (optional, uses defaults if not provided):
 
-4. Setup `.env` file for Next.js app (optional):
-
-Make a copy of `.env.example` in `packages/nextjs` folder, name it `.env` and enter the respective values
-
-```
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=
+```env
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_wallet_connect_project_id
 ```
 
-5. On a second terminal, start your NextJS app:
+### 3. Set Up MetaMask for Monad Testnet
 
+Add Monad Testnet to your MetaMask:
+
+**Network Details:**
+- **Network Name:** Monad Testnet
+- **RPC URL:** `https://testnet-rpc.monad.xyz`
+- **Chain ID:** `10200`
+- **Currency Symbol:** MON
+- **Block Explorer:** `https://testnet.monadexplorer.com`
+
+**Quick Add:**
+1. Open MetaMask
+2. Click "Add Network" → "Add Network Manually"
+3. Enter the details above
+4. Save and switch to Monad Testnet
+
+### 4. Get Test MON
+
+Get free test tokens from:
+- **Monad Faucet:** [Add faucet URL here]
+- Or request in the Monad Discord
+
+### 5. Deploy Smart Contracts
+
+From the root directory:
+
+```bash
+# Compile contracts
+yarn compile
+
+# Deploy to Monad Testnet
+yarn deploy --network monadTestnet
 ```
+
+The deployment will:
+- Deploy `FastestFingerPot.sol` to Monad Testnet
+- Generate TypeScript types in `packages/nextjs/contracts/`
+- Create deployment artifacts in `packages/hardhat/deployments/`
+
+### 6. Run Frontend
+
+```bash
+# Start the Next.js development server
 yarn start
 ```
 
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
+Open [http://localhost:3000](http://localhost:3000) to play! 🎮
 
-**What's next**:
+---
 
--   Edit your smart contract `YourContract.sol` in `packages/hardhat/contracts`
--   Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
--   Edit your deployment scripts in `packages/hardhat/deploy`
--   Edit your smart contract test in: `packages/hardhat/test`. To run test use `yarn hardhat:test`
+## 🧪 Testing
 
-## Documentation
+Run the test suite:
 
-Visit our [docs](https://docs.monad.xyz) to learn how to start building with Monad.
+```bash
+# Run all tests
+yarn test
 
-To know more about Scaffold-ETH features, check out their [website](https://scaffoldeth.io).
+# Or just Hardhat tests
+yarn hardhat:test
+
+# Run tests with gas reporting
+yarn test --network monadTestnet
+```
+
+Tests cover:
+- ✓ Contract deployment and initialization
+- ✓ Joining rounds with stakes
+- ✓ Click functionality
+- ✓ Winner determination
+- ✓ Automatic payouts
+- ✓ Score calculations
+
+---
+
+## 📁 Project Structure
+
+```
+fastest-finger-pot/
+├── packages/
+│   ├── hardhat/                 # Smart contracts & deployment
+│   │   ├── contracts/
+│   │   │   └── FastestFingerPot.sol   # Main game contract
+│   │   ├── deploy/
+│   │   │   ├── 00_deploy_your_contract.ts
+│   │   │   ├── 01_deploy_fastest_finger_pot.ts   # Deployment script
+│   │   │   └── 99_generateTsAbis.ts
+│   │   ├── test/
+│   │   │   └── FastestFingerPot.ts     # Test suite
+│   │   ├── hardhat.config.ts           # Hardhat configuration
+│   │   └── .env.example
+│   │
+│   └── nextjs/                  # Frontend
+│       ├── app/
+│       │   ├── page.tsx         # Main game UI
+│       │   ├── debug/           # Debug contracts page
+│       │   └── blockexplorer/   # Block explorer
+│       ├── components/
+│       ├── hooks/
+│       ├── utils/
+│       │   └── customChains.ts  # Monad Testnet config
+│       ├── contracts/
+│       │   └── deployedContracts.ts    # Auto-generated
+│       └── scaffold.config.ts
+│
+├── package.json
+├── README.md
+└── .gitignore
+```
+
+---
+
+## 🎮 Demo: How to Play
+
+### Step 1: Connect Wallet
+- Click "Connect Wallet" button
+- Select MetaMask or WalletConnect
+- Approve the connection
+
+### Step 2: Join a Round
+- Enter your stake amount (e.g., 0.1 MON)
+- Click "Join Round"
+- Approve the transaction in MetaMask
+
+### Step 3: Click Fast!
+- Once joined, the big green "CLICK ME!" button appears
+- Click as fast as possible during the 15-second round
+- Watch your score increase in real-time
+
+### Step 4: Win the Pot
+- The player with the highest (clicks × stake) wins
+- Winner is automatically paid when the round ends
+- New round starts automatically!
+
+### Tips
+- **Higher stake** = more points per click (better chances to win)
+- **Click spam** = maximize your score
+- Watch the leaderboard to see competition
+- Balance stake amount vs. click speed!
+
+---
+
+## 🔧 Smart Contract Details
+
+### FastestFingerPot.sol
+
+**Key Functions:**
+- `joinRound()` - Stake MON to join the current round
+- `click()` - Record a click (only during active round)
+- `endRound()` - End the round and pay the winner
+- `getPlayerScore(address)` - Get a player's current score
+- `getTimeRemaining()` - Get time left in the round
+
+**Security Features:**
+- ✓ ReentrancyGuard to prevent attacks
+- ✓ Input validation
+- ✓ Access control (only joined players can click)
+- ✓ Automatic winner determination
+- ✓ Emergency withdraw function
+
+**Gas Optimizations:**
+- Efficient storage layout
+- Minimal external calls
+- Compact event emissions
+
+---
+
+## 🛠️ Development Commands
+
+```bash
+# Smart Contracts
+yarn compile              # Compile Solidity contracts
+yarn deploy               # Deploy to local network
+yarn deploy --network monadTestnet  # Deploy to Monad
+yarn test                 # Run tests
+yarn hardhat:lint         # Lint Solidity/TypeScript
+
+# Frontend
+yarn start                # Start Next.js dev server
+yarn next:build           # Build for production
+yarn next:lint            # Lint frontend code
+
+# Clean
+yarn clean                # Remove build artifacts
+```
+
+---
+
+## 🌐 Monad Testnet Details
+
+- **Network Name:** Monad Testnet
+- **Chain ID:** 10200
+- **RPC URL:** https://testnet-rpc.monad.xyz
+- **Block Explorer:** https://testnet.monadexplorer.com
+- **Currency:** MON (native token)
+- **Faucet:** [Add faucet link]
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! This is a hackathon project, so:
+
+1. Fork the repo
+2. Create your feature branch
+3. Make your changes
+4. Submit a pull request
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 🙏 Acknowledgments
+
+- Built on [Scaffold-ETH Monad](https://github.com/monad-developers/scaffold-eth-monad)
+- Powered by [Monad](https://monad.xyz) - The blockchain of tomorrow
+- Inspired by classic clicker games
+
+---
+
+## 🐛 Known Issues & Future Improvements
+
+### Current Limitations
+- 15-second round duration is fixed
+- No player limit per round
+- Manual round ending (auto-ends when time expires)
+- Basic security (no MEV protection)
+
+### Future Enhancements
+- [ ] Multi-round tournaments
+- [ ] Leaderboards across rounds
+- [ ] Game statistics and analytics
+- [ ] Mobile-optimized UI
+- [ ] Sound effects and animations
+- [ ] Referral system
+- [ ] Staking pools
+- [ ] Governance token
+
+---
+
+## 📞 Support
+
+- **Discord:** [Monad Discord](https://discord.gg/monad)
+- **Twitter:** [@monad_xyz](https://twitter.com/monad_xyz)
+- **Docs:** [Monad Docs](https://docs.monad.xyz)
+
+---
+
+## ⚠️ Disclaimer
+
+This is a testnet deployment for educational and hackathon purposes only. Not for production use. Use at your own risk.
+
+---
+
+<div align="center">
+  <p>Made with ❤️ for the Monad Blitz Delhi Hackathon</p>
+  <p>Happy clicking! 🚀</p>
+</div>

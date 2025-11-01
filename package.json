@@ -41,6 +41,9 @@
     "husky": "^9.1.6",
     "lint-staged": "^15.2.10"
   },
+  "resolutions": {
+    "@yarnpkg/fslib": "2.10.1"
+  },
   "engines": {
     "node": ">=18.18.0"
   }

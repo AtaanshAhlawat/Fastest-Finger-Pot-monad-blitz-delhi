@@ -1,89 +1,374 @@
 "use client";
 
-import Link from "next/link";
-import type { NextPage } from "next";
 import { useAccount } from "wagmi";
-import { BoltIcon, BookOpenIcon, BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { useState, useEffect } from "react";
+import { useScaffoldContractRead, useScaffoldContractWrite, useScaffoldWatchContractEvent } from "~~/hooks/scaffold-eth";
+import { useWatchBalance } from "~~/hooks/scaffold-eth/useWatchBalance";
+import { EtherInput } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
 
-const Home: NextPage = () => {
+const Home = () => {
   const { address: connectedAddress } = useAccount();
+  const { data: balance } = useWatchBalance({ address: connectedAddress });
+
+  // Game state
+  const [stakeAmount, setStakeAmount] = useState("");
+  const [hasJoined, setHasJoined] = useState(false);
+  const [playerClicks, setPlayerClicks] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+
+  // Read contract data
+  const { data: roundActive } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "roundActive",
+    watch: true,
+  });
+
+  const { data: potSize } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "potSize",
+    watch: true,
+  });
+
+  const { data: roundNumber } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "currentRoundNumber",
+    watch: true,
+  });
+
+  const { data: winner } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "currentWinner",
+    watch: true,
+  });
+
+  const { data: timeLeft } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "getTimeRemaining",
+    watch: true,
+  });
+
+  const { data: roundStartTime } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "roundStartTime",
+    watch: true,
+  });
+
+  const { data: playerData } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "getPlayerData",
+    args: [connectedAddress],
+    watch: true,
+  });
+
+  const { data: playerScore } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "getPlayerScore",
+    args: [connectedAddress],
+    watch: true,
+  });
+
+  const { data: allPlayers } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "getCurrentRoundPlayers",
+    watch: true,
+  });
+
+  // Write functions
+  const { writeAsync: joinRound, isPending: isJoining } = useScaffoldContractWrite({
+    contractName: "FastestFingerPot",
+    functionName: "joinRound",
+    onBlockConfirmation: () => {
+      setHasJoined(true);
+    },
+  });
+
+  const { writeAsync: click, isPending: isClicking } = useScaffoldContractWrite({
+    contractName: "FastestFingerPot",
+    functionName: "click",
+    onBlockConfirmation: () => {
+      // Click recorded
+    },
+  });
+
+  const { writeAsync: endRound } = useScaffoldContractWrite({
+    contractName: "FastestFingerPot",
+    functionName: "endRound",
+  });
+
+  // Watch events
+  useScaffoldWatchContractEvent({
+    contractName: "FastestFingerPot",
+    eventName: "PlayerJoined",
+    onLogs: (logs) => {
+      console.log("Player joined:", logs);
+      setHasJoined(true);
+    },
+  });
+
+  useScaffoldWatchContractEvent({
+    contractName: "FastestFingerPot",
+    eventName: "PlayerClicked",
+    onLogs: (logs) => {
+      console.log("Player clicked:", logs);
+      if (playerData) {
+        setPlayerClicks(Number(playerData.clicks));
+      }
+    },
+  });
+
+  useScaffoldWatchContractEvent({
+    contractName: "FastestFingerPot",
+    eventName: "RoundStarted",
+    onLogs: (logs) => {
+      console.log("New round started:", logs);
+      setHasJoined(false);
+      setPlayerClicks(0);
+    },
+  });
+
+  // Update time remaining
+  useEffect(() => {
+    if (timeLeft) {
+      setTimeRemaining(Number(timeLeft));
+    }
+  }, [timeLeft]);
+
+  // Update player data
+  useEffect(() => {
+    if (playerData) {
+      setHasJoined(playerData.hasJoined);
+      setPlayerClicks(Number(playerData.clicks));
+    }
+  }, [playerData]);
+
+  // Auto-end round when time is up
+  useEffect(() => {
+    if (timeRemaining === 0 && roundActive) {
+      const timer = setTimeout(() => {
+        endRound();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [timeRemaining, roundActive]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const handleJoinRound = async () => {
+    if (!stakeAmount || parseFloat(stakeAmount) <= 0) {
+      alert("Please enter a valid stake amount");
+      return;
+    }
+    const stakeInWei = BigInt(Math.floor(parseFloat(stakeAmount) * 1e18));
+    await joinRound({ value: stakeInWei.toString() });
+    setStakeAmount("");
+  };
+
+  const formatAddress = (addr: string) => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
+  const formatScore = (score: bigint) => {
+    return (Number(score) / 1e18).toFixed(2);
+  };
+
+  const formatPot = (pot: bigint) => {
+    return (Number(pot) / 1e18).toFixed(4);
+  };
 
   return (
     <>
-      <div className="flex items-center flex-col flex-grow pt-10">
-        <div className="px-5">
-          <h1 className="text-center">
-            <span className="block text-2xl mb-2">Welcome to</span>
-            <span className="block text-4xl font-bold">Scaffold-ETH-Monad</span>
+      <div className="flex items-center flex-col flex-grow pt-10 px-5">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-blue-500 to-purple-600 text-transparent bg-clip-text">
+            🎮 Fastest Finger Pot 🎮
           </h1>
-          <div className="flex justify-center items-center space-x-2 flex-col sm:flex-row">
-            <p className="my-2 font-medium">Connected Address:</p>
-            <Address address={connectedAddress} />
-          </div>
-          <p className="text-center text-lg">
-            Get started by editing{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/nextjs/app/page.tsx
-            </code>
-          </p>
-          <p className="text-center text-lg">
-            Edit your smart contract{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              YourContract.sol
-            </code>{" "}
-            in{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/hardhat/contracts
-            </code>
-          </p>
+          <p className="text-xl text-gray-600">Click your way to victory on Monad!</p>
         </div>
 
-        <div className="flex-grow bg-base-300 w-full mt-16 px-8 py-12">
-          <div className="flex justify-center items-center gap-12 flex-col sm:flex-row">
-            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <BoltIcon className="h-8 w-8" />
-              <p>
-                Get testnet funds from the{" "}
-                <Link href="#" passHref className="link">
-                  {/* TODO: Add Faucet link here */}Faucet
-                </Link>{" "}
-              </p>
-            </div>
-            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <BugAntIcon className="h-8 w-8" />
-              <p>
-                Tinker with your smart contract using the{" "}
-                <Link href="/debug" passHref className="link">
-                  Debug Contracts
-                </Link>{" "}
-                tab.
-              </p>
-            </div>
-            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <MagnifyingGlassIcon className="h-8 w-8" />
-              <p>
-                Explore your local transactions with the{" "}
-                <Link href="" passHref className="link">
-                  {/* TODO: Add Explorer link here */}Block Explorer
-                </Link>{" "}
-                tab.
-              </p>
-            </div>
-            <div className="flex flex-col bg-base-200 border-base-100 border-2 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <BookOpenIcon className="h-8 w-8" />
-              <p>
-                Learn more about{" "}
-                <Link href="https://docs.monad.xyz" passHref className="link" target="_blank">
-                  Monad
-                </Link>
-                .
-              </p>
+        {/* Game Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl mb-8">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-300">
+            <div className="text-sm text-gray-600 mb-1">Round #{roundNumber?.toString() || "1"}</div>
+            <div className="text-3xl font-bold text-blue-600">
+              {roundActive ? "🟢 ACTIVE" : "🔴 ENDED"}
             </div>
           </div>
+
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border-2 border-purple-300">
+            <div className="text-sm text-gray-600 mb-1">Pot Size</div>
+            <div className="text-3xl font-bold text-purple-600">
+              {potSize ? formatPot(potSize) : "0.0000"} MON
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-300">
+            <div className="text-sm text-gray-600 mb-1">Time Remaining</div>
+            <div className="text-3xl font-bold text-orange-600">
+              {formatTime(timeRemaining)}
+            </div>
+          </div>
+        </div>
+
+        {/* Winner Display */}
+        {winner && winner !== "0x0000000000000000000000000000000000000000" && (
+          <div className="bg-gradient-to-r from-yellow-400 to-yellow-600 p-4 rounded-lg mb-8 w-full max-w-4xl">
+            <div className="text-center text-white font-bold text-xl">
+              🏆 Last Winner: <Address address={winner} />
+            </div>
+          </div>
+        )}
+
+        {/* Player Info */}
+        {connectedAddress && (
+          <div className="bg-white p-6 rounded-xl border-2 border-gray-300 mb-8 w-full max-w-4xl">
+            <h2 className="text-2xl font-bold mb-4 text-center">Your Stats</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-sm text-gray-600 mb-1">Status</div>
+                <div className="text-2xl font-bold">
+                  {hasJoined ? "✅ Joined" : "❌ Not Joined"}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-gray-600 mb-1">Your Clicks</div>
+                <div className="text-2xl font-bold">{playerClicks}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-gray-600 mb-1">Your Score</div>
+                <div className="text-2xl font-bold">
+                  {playerScore ? formatScore(playerScore) : "0.00"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Join Section */}
+        {connectedAddress && !hasJoined && (
+          <div className="bg-white p-6 rounded-xl border-2 border-green-300 mb-8 w-full max-w-4xl">
+            <h2 className="text-2xl font-bold mb-4 text-center">Join the Round</h2>
+            <div className="flex flex-col md:flex-row gap-4 items-center">
+              <div className="flex-grow">
+                <EtherInput
+                  value={stakeAmount}
+                  onChange={setStakeAmount}
+                  placeholder="Enter stake amount in MON"
+                />
+              </div>
+              <button
+                className="btn btn-primary btn-lg"
+                onClick={handleJoinRound}
+                disabled={isJoining}
+              >
+                {isJoining ? "Joining..." : "Join Round"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Click Button */}
+        {connectedAddress && hasJoined && roundActive && (
+          <div className="mb-8 w-full max-w-4xl">
+            <button
+              className="btn btn-lg w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-none text-4xl py-12 rounded-xl shadow-lg transform transition-all active:scale-95"
+              onClick={() => click()}
+              disabled={isClicking || !roundActive}
+            >
+              {isClicking ? "Clicking..." : "⚡ CLICK ME! ⚡"}
+            </button>
+            <div className="text-center mt-4 text-gray-600">
+              Higher stake = More points per click!
+            </div>
+          </div>
+        )}
+
+        {/* Players Leaderboard */}
+        <div className="bg-white p-6 rounded-xl border-2 border-blue-300 w-full max-w-4xl">
+          <h2 className="text-2xl font-bold mb-4 text-center">Leaderboard</h2>
+          {!allPlayers || allPlayers.length === 0 ? (
+            <div className="text-center text-gray-500 py-4">No players yet. Be the first to join!</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-gray-200">
+                    <th className="text-left p-2">Rank</th>
+                    <th className="text-left p-2">Player</th>
+                    <th className="text-right p-2">Clicks</th>
+                    <th className="text-right p-2">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPlayers.map((player, index) => (
+                    <PlayerRow key={player} player={player} rank={index + 1} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Connection Status */}
+        {!connectedAddress && (
+          <div className="bg-yellow-50 border-2 border-yellow-400 p-6 rounded-xl mt-8 w-full max-w-2xl">
+            <p className="text-center text-gray-700 text-lg">
+              Connect your wallet to play! Make sure you&apos;re on Monad Testnet.
+            </p>
+          </div>
+        )}
+
+        {/* Info Section */}
+        <div className="mt-8 text-center text-gray-600 max-w-2xl">
+          <h3 className="text-xl font-bold mb-2">How to Play</h3>
+          <ol className="text-left list-decimal list-inside space-y-1">
+            <li>Join a round by staking MON tokens</li>
+            <li>Click as fast as you can during the 15-second round</li>
+            <li>Highest score (clicks × stake) wins the entire pot!</li>
+            <li>Winner is automatically paid when the round ends</li>
+          </ol>
         </div>
       </div>
     </>
+  );
+};
+
+// Player Row Component
+const PlayerRow = ({ player, rank }: { player: string; rank: number }) => {
+  const { data: playerData } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "getPlayerData",
+    args: [player],
+    watch: true,
+  });
+
+  const { data: playerScore } = useScaffoldContractRead({
+    contractName: "FastestFingerPot",
+    functionName: "getPlayerScore",
+    args: [player],
+    watch: true,
+  });
+
+  const formatScore = (score: bigint) => {
+    return (Number(score) / 1e18).toFixed(2);
+  };
+
+  return (
+    <tr className="border-b border-gray-100 hover:bg-gray-50">
+      <td className="p-2 font-bold">#{rank}</td>
+      <td className="p-2">
+        <Address address={player} />
+      </td>
+      <td className="p-2 text-right">{playerData ? Number(playerData.clicks) : 0}</td>
+      <td className="p-2 text-right font-bold">
+        {playerScore ? formatScore(playerScore) : "0.00"}
+      </td>
+    </tr>
   );
 };
 
