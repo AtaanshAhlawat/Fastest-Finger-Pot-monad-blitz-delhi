@@ -11,15 +11,16 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  */
 contract FastestFingerPot is ReentrancyGuard {
     // Round duration in seconds
-    uint256 public constant ROUND_DURATION = 15 seconds;
-    uint256 public constant INACTIVITY_TIMEOUT = 1 minutes; // 5 minutes if no one joins
+    uint256 public constant ROUND_DURATION = 15; // Changed from "15 seconds" to just 15
+    uint256 public constant INACTIVITY_TIMEOUT = 300; // 5 minutes in seconds (changed from 1 minute)
+    uint256 public constant MIN_STAKE = 0.001 ether; // Added minimum stake
     
     // Current round state
     uint256 public roundStartTime;
     uint256 public currentRoundNumber;
     bool public roundActive;
     address public currentWinner;
-    address public lastRoundWinner; // Winner of the previous round for auto-payout
+    address public lastRoundWinner;
     uint256 public potSize;
     
     // Player data
@@ -29,13 +30,13 @@ contract FastestFingerPot is ReentrancyGuard {
         bool hasJoined;
     }
     
-    mapping(uint256 => mapping(address => PlayerData)) public roundPlayers; // round => player => data
-    mapping(uint256 => address[]) public roundPlayerList; // round => list of players
+    mapping(uint256 => mapping(address => PlayerData)) public roundPlayers;
+    mapping(uint256 => address[]) public roundPlayerList;
     
     // Events
     event RoundStarted(uint256 indexed roundNumber, uint256 startTime);
     event PlayerJoined(uint256 indexed roundNumber, address indexed player, uint256 stake);
-    event PlayerClicked(uint256 indexed roundNumber, address indexed player);
+    event PlayerClicked(uint256 indexed roundNumber, address indexed player, uint256 totalClicks);
     event RoundEnded(uint256 indexed roundNumber, address indexed winner, uint256 potSize, uint256 score);
     event WinnerPaid(uint256 indexed roundNumber, address indexed winner, uint256 amount);
     event InactivityPayout(uint256 indexed roundNumber, address indexed recipient, uint256 amount);
@@ -49,14 +50,13 @@ contract FastestFingerPot is ReentrancyGuard {
     
     /**
      * @dev Join the current round by staking MON tokens
-     * @notice Players must stake a minimum amount to participate
      */
     function joinRound() external payable nonReentrant {
         require(roundActive, "Round not active");
         require(!roundPlayers[currentRoundNumber][msg.sender].hasJoined, "Already joined this round");
-        require(msg.value > 0, "Must stake some MON");
+        require(msg.value >= MIN_STAKE, "Minimum stake is 0.001 MON");
+        require(block.timestamp < roundStartTime + ROUND_DURATION, "Round has ended");
         
-        // Reset clicks if player joins a new round
         roundPlayers[currentRoundNumber][msg.sender] = PlayerData({
             clicks: 0,
             stake: msg.value,
@@ -71,20 +71,19 @@ contract FastestFingerPot is ReentrancyGuard {
     
     /**
      * @dev Click button during active round
-     * @notice Only players who joined can click
      */
     function click() external nonReentrant {
         require(roundActive, "Round not active");
         require(roundPlayers[currentRoundNumber][msg.sender].hasJoined, "Must join round first");
+        require(block.timestamp < roundStartTime + ROUND_DURATION, "Round has ended");
         
         roundPlayers[currentRoundNumber][msg.sender].clicks++;
         
-        emit PlayerClicked(currentRoundNumber, msg.sender);
+        emit PlayerClicked(currentRoundNumber, msg.sender, roundPlayers[currentRoundNumber][msg.sender].clicks);
     }
     
     /**
      * @dev End current round and determine winner
-     * @notice Can be called by anyone, but only after round duration has passed
      */
     function endRound() external nonReentrant {
         require(roundActive, "Round not active");
@@ -94,8 +93,9 @@ contract FastestFingerPot is ReentrancyGuard {
         uint256 highestScore = 0;
         
         // Find the player with highest (clicks × stake) score
-        for (uint256 i = 0; i < roundPlayerList[currentRoundNumber].length; i++) {
-            address player = roundPlayerList[currentRoundNumber][i];
+        address[] memory players = roundPlayerList[currentRoundNumber];
+        for (uint256 i = 0; i < players.length; i++) {
+            address player = players[i];
             PlayerData memory data = roundPlayers[currentRoundNumber][player];
             uint256 score = data.clicks * data.stake;
             
@@ -162,8 +162,14 @@ contract FastestFingerPot is ReentrancyGuard {
     /**
      * @dev Get player data for current round
      */
-    function getPlayerData(address player) public view returns (PlayerData memory) {
-        return roundPlayers[currentRoundNumber][player];
+    function getPlayerData(address player) public view returns (
+        uint256 clicks,
+        uint256 stake,
+        uint256 score,
+        bool hasJoined
+    ) {
+        PlayerData memory data = roundPlayers[currentRoundNumber][player];
+        return (data.clicks, data.stake, data.clicks * data.stake, data.hasJoined);
     }
     
     /**
@@ -174,8 +180,56 @@ contract FastestFingerPot is ReentrancyGuard {
     }
     
     /**
+     * @dev Get leaderboard for current round
+     */
+    function getLeaderboard() public view returns (
+        address[] memory players,
+        uint256[] memory scores,
+        uint256[] memory clicks,
+        uint256[] memory stakes
+    ) {
+        address[] memory currentPlayers = roundPlayerList[currentRoundNumber];
+        uint256 len = currentPlayers.length;
+        
+        players = new address[](len);
+        scores = new uint256[](len);
+        clicks = new uint256[](len);
+        stakes = new uint256[](len);
+        
+        for (uint256 i = 0; i < len; i++) {
+            address player = currentPlayers[i];
+            PlayerData memory data = roundPlayers[currentRoundNumber][player];
+            
+            players[i] = player;
+            clicks[i] = data.clicks;
+            stakes[i] = data.stake;
+            scores[i] = data.clicks * data.stake;
+        }
+        
+        return (players, scores, clicks, stakes);
+    }
+    
+    /**
+     * @dev Get comprehensive round info
+     */
+    function getRoundInfo() public view returns (
+        uint256 roundNumber,
+        uint256 pot,
+        uint256 playerCount,
+        uint256 timeLeft,
+        bool active
+    ) {
+        return (
+            currentRoundNumber,
+            potSize,
+            roundPlayerList[currentRoundNumber].length,
+            getTimeRemaining(),
+            roundActive
+        );
+    }
+    
+    /**
      * @dev Claim inactivity payout - if no one joined for 5 minutes, last winner gets the pot
-     * @notice Can be called by anyone, but only if conditions are met
      */
     function claimInactivityPayout() external nonReentrant {
         require(roundActive, "Round not active");
@@ -217,17 +271,4 @@ contract FastestFingerPot is ReentrancyGuard {
         if (block.timestamp >= roundStartTime + INACTIVITY_TIMEOUT) return 0;
         return (roundStartTime + INACTIVITY_TIMEOUT) - block.timestamp;
     }
-    
-    /**
-     * @dev Emergency function to recover stuck funds
-     * @notice Only owner can call this
-     */
-    function emergencyWithdraw() external nonReentrant {
-        require(!roundActive || isRoundEnded(), "Cannot withdraw during active round");
-        require(address(this).balance > 0, "No funds to withdraw");
-        
-        (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
-        require(success, "Transfer failed");
-    }
 }
-

@@ -440,7 +440,7 @@ const Home = () => {
           {!allPlayers || allPlayers.length === 0 ? (
             <div className="text-center text-gray-500 py-4">No players yet. Be the first to join!</div>
           ) : (
-            <LeaderboardTable players={allPlayers || []} />
+            <LeaderboardTable players={allPlayers} />
           )}
         </div>
 
@@ -469,7 +469,7 @@ const Home = () => {
 };
 
 // Leaderboard Table Component
-const LeaderboardTable = ({ players }: { players: string[] }) => {
+const LeaderboardTable = ({ players }: { players: readonly string[] }) => {
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
